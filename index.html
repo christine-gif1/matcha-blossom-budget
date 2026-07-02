@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f7a8c4">
+<title>Matcha Blossom Budget</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍵</text></svg>">
+</head>
+<body>
+<div class="app">
+
+  <header class="app-header">
+    <div class="header-top">
+      <h1>🍵 Matcha Blossom</h1>
+      <button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙️</button>
+    </div>
+    <div class="balance-card">
+      <span class="balance-label">✨ Remaining Balance ✨</span>
+      <span class="balance-amount" id="totalBalance">$0.00</span>
+      <span class="balance-asof" id="balanceAsOf">as of July 2026</span>
+    </div>
+  </header>
+
+  <main id="homeView" class="view active">
+    <div class="month-nav">
+      <button class="nav-arrow" id="prevMonth" aria-label="Previous month">‹</button>
+      <span class="nav-label" id="monthLabel">July 2026</span>
+      <button class="nav-arrow" id="nextMonth" aria-label="Next month">›</button>
+    </div>
+
+    <div class="month-actions">
+      <button id="resetMonthBtn" class="reset-month-btn">🗑️ Reset this month</button>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card income">
+        <span class="stat-icon">🌱</span>
+        <span class="stat-label">Income</span>
+        <span class="stat-value" id="monthIncome">$0.00</span>
+      </div>
+      <div class="stat-card expense">
+        <span class="stat-icon">🌸</span>
+        <span class="stat-label">Expenses</span>
+        <span class="stat-value" id="monthExpense">$0.00</span>
+      </div>
+      <div class="stat-card balance">
+        <span class="stat-icon">🍡</span>
+        <span class="stat-label">Left</span>
+        <span class="stat-value" id="monthBalance">$0.00</span>
+      </div>
+    </div>
+
+    <div class="budget-card" id="budgetCard">
+      <div class="budget-card-top">
+        <button type="button" id="budgetCollapseBtn" class="budget-collapse-btn">
+          <span class="budget-title">🎯 Monthly Budget</span>
+          <span class="budget-chevron" id="budgetChevron">▾</span>
+        </button>
+        <button id="addBudgetCatBtn" class="budget-edit">+ Add</button>
+      </div>
+      <div class="budget-bar-track"><div class="budget-bar-fill" id="budgetBarFill"></div></div>
+      <div class="budget-card-legend">
+        <span id="budgetSpentLabel">$0.00 spent</span>
+        <span id="budgetTargetLabel">of $0.00</span>
+      </div>
+      <div class="budget-items" id="budgetItems"></div>
+    </div>
+
+    <div class="transactions-list" id="transactionsList"></div>
+    <div class="empty-state" id="emptyState">
+      <p>🌷 No transactions yet.<br>Tap the <strong>+</strong> button to add one!</p>
+    </div>
+  </main>
+
+  <main id="annualView" class="view">
+    <div class="month-nav">
+      <button class="nav-arrow" id="prevYear" aria-label="Previous year">‹</button>
+      <span class="nav-label" id="yearLabel">2026</span>
+      <button class="nav-arrow" id="nextYear" aria-label="Next year">›</button>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-card income">
+        <span class="stat-icon">🌱</span>
+        <span class="stat-label">Income</span>
+        <span class="stat-value" id="yearIncome">$0.00</span>
+      </div>
+      <div class="stat-card expense">
+        <span class="stat-icon">🌸</span>
+        <span class="stat-label">Expenses</span>
+        <span class="stat-value" id="yearExpense">$0.00</span>
+      </div>
+      <div class="stat-card balance">
+        <span class="stat-icon">🍡</span>
+        <span class="stat-label">Net</span>
+        <span class="stat-value" id="yearBalance">$0.00</span>
+      </div>
+    </div>
+
+    <div class="months-grid" id="monthsGrid"></div>
+  </main>
+
+  <nav class="bottom-nav">
+    <button class="nav-btn active" data-view="homeView">
+      <span class="nav-btn-icon">🏠</span><span>Home</span>
+    </button>
+    <button class="fab" id="addBtn" aria-label="Add transaction">+</button>
+    <button class="nav-btn" data-view="annualView">
+      <span class="nav-btn-icon">📅</span><span>Annual</span>
+    </button>
+  </nav>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="modalTitle">Add Transaction</h2>
+      <button id="closeModal" class="icon-btn" aria-label="Close">✕</button>
+    </div>
+
+    <div class="type-toggle">
+      <button type="button" class="type-btn expense active" data-type="expense">🌸 Expense</button>
+      <button type="button" class="type-btn income" data-type="income">🌱 Income</button>
+    </div>
+
+    <div class="form-group">
+      <label>Category</label>
+      <div class="category-grid" id="categoryGrid"></div>
+      <div class="add-cat-form" id="addCategoryForm" hidden>
+        <div class="add-cat-row">
+          <button type="button" id="emojiPickerBtn" class="emoji-preview-btn">🍩</button>
+          <input type="text" id="newCatName" placeholder="Category name" maxlength="16" class="cat-name-input">
+        </div>
+        <div class="emoji-grid" id="emojiGrid" hidden></div>
+        <div class="modal-actions">
+          <button type="button" id="cancelAddCat" class="delete-btn">Cancel</button>
+          <button type="button" id="deleteCatFromForm" class="delete-btn" hidden>Delete</button>
+          <button type="button" id="confirmAddCat" class="save-btn secondary">Add Category</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="amountInput">Amount</label>
+      <input type="number" id="amountInput" placeholder="0.00" step="0.01" min="0" inputmode="decimal">
+    </div>
+
+    <div class="form-group">
+      <label for="dateInput">Date</label>
+      <input type="date" id="dateInput">
+    </div>
+
+    <div class="form-group">
+      <label for="noteInput">Note</label>
+      <input type="text" id="noteInput" placeholder="Add a note (optional)" maxlength="80">
+    </div>
+
+    <div class="modal-actions">
+      <button id="deleteBtn" class="delete-btn" hidden>Delete</button>
+      <button id="saveBtn" class="save-btn">Save 🍵</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="settingsOverlay">
+  <div class="modal small">
+    <div class="modal-header">
+      <h2>Settings</h2>
+      <button id="closeSettings" class="icon-btn" aria-label="Close">✕</button>
+    </div>
+    <div class="form-group">
+      <label for="currencySelect">Currency</label>
+      <select id="currencySelect">
+        <option value="$">$ Dollar</option>
+        <option value="₱">₱ Peso</option>
+        <option value="€">€ Euro</option>
+        <option value="£">£ Pound</option>
+        <option value="¥">¥ Yen</option>
+        <option value="A$">A$ Aus. Dollar</option>
+      </select>
+    </div>
+    <button id="exportBtn" class="save-btn secondary">Export data (backup)</button>
+    <button id="clearBtn" class="delete-btn full">Erase all data</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="budgetCatOverlay">
+  <div class="modal small">
+    <div class="modal-header">
+      <h2 id="budgetCatTitle">Add Budget Category</h2>
+      <button id="closeBudgetCat" class="icon-btn" aria-label="Close">✕</button>
+    </div>
+    <div class="form-group">
+      <label for="budgetCatSelect">Category</label>
+      <select id="budgetCatSelect"></select>
+    </div>
+    <div class="form-group">
+      <label for="budgetCatAmount">Monthly Target</label>
+      <input type="number" id="budgetCatAmount" placeholder="0.00" step="0.01" min="0" inputmode="decimal">
+    </div>
+    <div class="modal-actions">
+      <button id="deleteBudgetCat" class="delete-btn" hidden>Remove</button>
+      <button id="saveBudgetCat" class="save-btn">Save 🎯</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
