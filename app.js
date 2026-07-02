@@ -216,6 +216,8 @@
     closeSettings: document.getElementById('closeSettings'),
     currencySelect: document.getElementById('currencySelect'),
     exportBtn: document.getElementById('exportBtn'),
+    importBtn: document.getElementById('importBtn'),
+    importFile: document.getElementById('importFile'),
     clearBtn: document.getElementById('clearBtn')
   };
 
@@ -760,8 +762,19 @@
     localStorage.setItem(CURRENCY_KEY, state.currency);
     renderAll();
   });
+  function exportData() {
+    return {
+      transactions: state.transactions,
+      customCategories: state.customCategories,
+      categoryBudgets: state.categoryBudgets,
+      paidBills: state.paidBills,
+      currency: state.currency,
+      budgetCollapsed: state.budgetCollapsed
+    };
+  }
+
   el.exportBtn.addEventListener('click', function () {
-    var blob = new Blob([JSON.stringify(state.transactions, null, 2)], { type: 'application/json' });
+    var blob = new Blob([JSON.stringify(exportData(), null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
@@ -769,6 +782,55 @@
     a.click();
     URL.revokeObjectURL(url);
   });
+
+  el.importBtn.addEventListener('click', function () { el.importFile.click(); });
+  el.importFile.addEventListener('change', function () {
+    var file = el.importFile.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      var data;
+      try {
+        data = JSON.parse(reader.result);
+      } catch (e) {
+        alert('That file is not a valid backup.');
+        el.importFile.value = '';
+        return;
+      }
+      var isLegacyArray = Array.isArray(data);
+      var incomingTx = isLegacyArray ? data : data.transactions;
+      if (!Array.isArray(incomingTx)) {
+        alert('That file is not a valid backup.');
+        el.importFile.value = '';
+        return;
+      }
+      if (!confirm('Import will replace all current data on this device. Continue?')) {
+        el.importFile.value = '';
+        return;
+      }
+
+      state.transactions = incomingTx;
+      state.customCategories = (!isLegacyArray && data.customCategories) || { expense: [], income: [] };
+      state.categoryBudgets = (!isLegacyArray && data.categoryBudgets) || [];
+      state.paidBills = (!isLegacyArray && data.paidBills) || {};
+      state.currency = (!isLegacyArray && data.currency) || state.currency;
+      state.budgetCollapsed = !isLegacyArray && !!data.budgetCollapsed;
+
+      saveTransactions();
+      saveCustomCategories();
+      saveCategoryBudgets();
+      savePaidBills();
+      localStorage.setItem(CURRENCY_KEY, state.currency);
+      localStorage.setItem(BUDGET_COLLAPSED_KEY, state.budgetCollapsed);
+
+      el.importFile.value = '';
+      el.settingsOverlay.classList.remove('show');
+      renderAll();
+      alert('Import complete!');
+    };
+    reader.readAsText(file);
+  });
+
   el.clearBtn.addEventListener('click', function () {
     if (confirm('Erase all transactions? This cannot be undone.')) {
       state.transactions = [];
