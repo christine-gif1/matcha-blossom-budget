@@ -218,6 +218,20 @@
     exportBtn: document.getElementById('exportBtn'),
     importBtn: document.getElementById('importBtn'),
     importFile: document.getElementById('importFile'),
+    statementBtn: document.getElementById('statementBtn'),
+    statementOverlay: document.getElementById('statementOverlay'),
+    closeStatement: document.getElementById('closeStatement'),
+    stmtStepFile: document.getElementById('stmtStepFile'),
+    stmtStepReview: document.getElementById('stmtStepReview'),
+    stmtChooseBtn: document.getElementById('stmtChooseBtn'),
+    stmtFileInput: document.getElementById('stmtFileInput'),
+    stmtLoading: document.getElementById('stmtLoading'),
+    stmtError: document.getElementById('stmtError'),
+    stmtSummary: document.getElementById('stmtSummary'),
+    stmtSelectAll: document.getElementById('stmtSelectAll'),
+    stmtRows: document.getElementById('stmtRows'),
+    stmtBackBtn: document.getElementById('stmtBackBtn'),
+    stmtImportBtn: document.getElementById('stmtImportBtn'),
     clearBtn: document.getElementById('clearBtn')
   };
 
@@ -838,6 +852,383 @@
       el.settingsOverlay.classList.remove('show');
       renderAll();
     }
+  });
+
+  // ---------- Bank Statement Import ----------
+  var PDFJS_VERSION = '3.11.174';
+
+  function loadPdfJs() {
+    if (window.pdfjsLib) return Promise.resolve();
+    return new Promise(function (resolve, reject) {
+      var script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + PDFJS_VERSION + '/pdf.min.js';
+      script.onload = function () {
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/' + PDFJS_VERSION + '/pdf.worker.min.js';
+        resolve();
+      };
+      script.onerror = function () { reject(new Error('Could not load PDF reader.')); };
+      document.head.appendChild(script);
+    });
+  }
+
+  function parseCSVText(text) {
+    var rows = [];
+    var row = [];
+    var field = '';
+    var inQuotes = false;
+    for (var i = 0; i < text.length; i++) {
+      var c = text[i];
+      if (inQuotes) {
+        if (c === '"') {
+          if (text[i + 1] === '"') { field += '"'; i++; }
+          else { inQuotes = false; }
+        } else {
+          field += c;
+        }
+      } else if (c === '"') {
+        inQuotes = true;
+      } else if (c === ',') {
+        row.push(field); field = '';
+      } else if (c === '\r') {
+        // skip
+      } else if (c === '\n') {
+        row.push(field); rows.push(row); row = []; field = '';
+      } else {
+        field += c;
+      }
+    }
+    if (field.length || row.length) { row.push(field); rows.push(row); }
+    return rows.filter(function (r) { return r.some(function (c) { return c.trim() !== ''; }); });
+  }
+
+  function mapCsvColumns(header) {
+    var map = {};
+    header.forEach(function (h, idx) {
+      var k = (h || '').toLowerCase().trim();
+      if (map.date == null && /date/.test(k)) map.date = idx;
+      else if (map.desc == null && /(desc|narrative|memo|detail|particular|payee|merchant|reference)/.test(k)) map.desc = idx;
+      else if (map.amount == null && /^amount$/.test(k)) map.amount = idx;
+      else if (map.debit == null && /(debit|withdrawal|money ?out|paid ?out)/.test(k)) map.debit = idx;
+      else if (map.credit == null && /(credit|deposit|money ?in|paid ?in)/.test(k)) map.credit = idx;
+    });
+    return map;
+  }
+
+  function parseAmountStr(str) {
+    if (str == null) return null;
+    var s = String(str).trim();
+    if (!s) return null;
+    var neg = false;
+    if (/^\(.*\)$/.test(s)) { neg = true; s = s.slice(1, -1); }
+    if (/^-/.test(s)) neg = true;
+    s = s.replace(/[^\d.]/g, '');
+    if (!s) return null;
+    var n = parseFloat(s);
+    if (isNaN(n)) return null;
+    return neg ? -n : n;
+  }
+
+  function parseDateFlexible(str) {
+    if (!str) return null;
+    var s = String(str).trim();
+    var m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) return m[1] + '-' + m[2] + '-' + m[3];
+    m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (m) {
+      var a = parseInt(m[1], 10), b = parseInt(m[2], 10), y = m[3];
+      if (y.length === 2) y = (parseInt(y, 10) > 50 ? '19' : '20') + y;
+      var month = a, day = b;
+      if (a > 12 && b <= 12) { month = b; day = a; }
+      if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+      return y + '-' + pad(month) + '-' + pad(day);
+    }
+    var d = new Date(s);
+    if (!isNaN(d.getTime())) return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    return null;
+  }
+
+  function buildRowsFromCsv(text) {
+    var table = parseCSVText(text);
+    if (!table.length) return [];
+    var map = mapCsvColumns(table[0]);
+    var rows = [];
+    for (var r = 1; r < table.length; r++) {
+      var cols = table[r];
+      if (!cols || !cols.some(function (c) { return c.trim() !== ''; })) continue;
+
+      var date = parseDateFlexible(map.date != null ? cols[map.date] : null) || todayISO();
+      var desc;
+      if (map.desc != null) {
+        desc = cols[map.desc];
+      } else {
+        var used = [map.date, map.amount, map.debit, map.credit];
+        desc = cols.filter(function (_, i) { return used.indexOf(i) === -1; }).join(' ');
+      }
+
+      var amount = null, type = 'expense';
+      if (map.amount != null) {
+        var amt = parseAmountStr(cols[map.amount]);
+        if (amt != null) { type = amt < 0 ? 'expense' : 'income'; amount = Math.abs(amt); }
+      } else {
+        var debitVal = map.debit != null ? parseAmountStr(cols[map.debit]) : null;
+        var creditVal = map.credit != null ? parseAmountStr(cols[map.credit]) : null;
+        if (debitVal) { amount = Math.abs(debitVal); type = 'expense'; }
+        else if (creditVal) { amount = Math.abs(creditVal); type = 'income'; }
+      }
+      if (amount == null || isNaN(amount) || amount === 0) continue;
+
+      rows.push({
+        date: date,
+        note: (desc || '').trim().slice(0, 80),
+        amount: amount,
+        type: type,
+        category: type === 'expense' ? 'other-exp' : 'other-inc'
+      });
+    }
+    return rows;
+  }
+
+  function extractPdfLines(file) {
+    return file.arrayBuffer().then(function (buf) {
+      return window.pdfjsLib.getDocument({ data: buf }).promise;
+    }).then(function (pdf) {
+      var pagePromises = [];
+      for (var p = 1; p <= pdf.numPages; p++) {
+        pagePromises.push(pdf.getPage(p).then(function (page) {
+          return page.getTextContent().then(function (content) {
+            var lines = {};
+            content.items.forEach(function (it) {
+              var y = Math.round(it.transform[5]);
+              if (!lines[y]) lines[y] = [];
+              lines[y].push({ x: it.transform[4], str: it.str });
+            });
+            var ys = Object.keys(lines).map(Number).sort(function (a, b) { return b - a; });
+            return ys.map(function (y) {
+              return lines[y].sort(function (a, b) { return a.x - b.x; })
+                .map(function (it) { return it.str; }).join(' ');
+            });
+          });
+        }));
+      }
+      return Promise.all(pagePromises).then(function (pages) {
+        return pages.reduce(function (all, page) { return all.concat(page); }, []);
+      });
+    });
+  }
+
+  function buildRowsFromPdfLines(lines) {
+    var rows = [];
+    var lineRe = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})\s+(.+?)\s+(\(?-?\s?[₱$€£]?\s?\d[\d,]*\.\d{2}\)?)\s*$/;
+    lines.forEach(function (line) {
+      var m = line.match(lineRe);
+      if (!m) return;
+      var date = parseDateFlexible(m[1]);
+      var amount = parseAmountStr(m[3]);
+      if (!date || amount == null || amount === 0) return;
+      var type = amount < 0 ? 'expense' : 'income';
+      rows.push({
+        date: date,
+        note: m[2].trim().slice(0, 80),
+        amount: Math.abs(amount),
+        type: type,
+        category: type === 'expense' ? 'other-exp' : 'other-inc'
+      });
+    });
+    return rows;
+  }
+
+  function openStatementModal() {
+    el.settingsOverlay.classList.remove('show');
+    el.stmtStepFile.hidden = false;
+    el.stmtStepReview.hidden = true;
+    el.stmtError.hidden = true;
+    el.stmtLoading.hidden = true;
+    el.stmtFileInput.value = '';
+    el.statementOverlay.classList.add('show');
+  }
+
+  function closeStatementModal() {
+    el.statementOverlay.classList.remove('show');
+  }
+
+  function showStatementError(msg) {
+    el.stmtLoading.hidden = true;
+    el.stmtError.textContent = msg;
+    el.stmtError.hidden = false;
+  }
+
+  el.statementBtn.addEventListener('click', openStatementModal);
+  el.closeStatement.addEventListener('click', closeStatementModal);
+  el.statementOverlay.addEventListener('click', function (e) {
+    if (e.target === el.statementOverlay) closeStatementModal();
+  });
+  el.stmtChooseBtn.addEventListener('click', function () { el.stmtFileInput.click(); });
+  el.stmtBackBtn.addEventListener('click', function () {
+    el.stmtStepReview.hidden = true;
+    el.stmtStepFile.hidden = false;
+  });
+
+  el.stmtFileInput.addEventListener('change', function () {
+    var file = el.stmtFileInput.files[0];
+    if (!file) return;
+    el.stmtError.hidden = true;
+    el.stmtLoading.hidden = false;
+
+    var isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+
+    var parsePromise;
+    if (isPdf) {
+      parsePromise = loadPdfJs()
+        .then(function () { return extractPdfLines(file); })
+        .then(buildRowsFromPdfLines);
+    } else {
+      parsePromise = file.text().then(buildRowsFromCsv);
+    }
+
+    parsePromise.then(function (rows) {
+      el.stmtLoading.hidden = true;
+      if (!rows.length) {
+        showStatementError('Couldn\'t find any transactions in that file. For best results, export a CSV statement from your bank\'s website instead.');
+        return;
+      }
+      renderStatementReview(rows);
+    }).catch(function (err) {
+      showStatementError('Something went wrong reading that file: ' + err.message);
+    });
+  });
+
+  function populateStmtCategorySelect(selectEl, type, selectedId) {
+    selectEl.innerHTML = getCategories(type).map(function (c) {
+      return '<option value="' + c.id + '">' + c.icon + ' ' + c.name + '</option>';
+    }).join('');
+    selectEl.value = selectedId;
+    if (!selectEl.value) selectEl.selectedIndex = 0;
+  }
+
+  function renderStatementReview(rows) {
+    el.stmtStepFile.hidden = true;
+    el.stmtStepReview.hidden = false;
+    el.stmtSelectAll.checked = true;
+    el.stmtSummary.textContent = rows.length + ' transaction' + (rows.length === 1 ? '' : 's') + ' found — review before importing';
+    el.stmtRows.innerHTML = '';
+
+    rows.forEach(function (row) {
+      var rowEl = document.createElement('div');
+      rowEl.className = 'stmt-row';
+
+      var check = document.createElement('input');
+      check.type = 'checkbox';
+      check.className = 'stmt-check';
+      check.checked = true;
+      check.addEventListener('change', function () {
+        rowEl.classList.toggle('excluded', !check.checked);
+      });
+      rowEl.appendChild(check);
+
+      var main = document.createElement('div');
+      main.className = 'stmt-row-main';
+
+      var top = document.createElement('div');
+      top.className = 'stmt-row-top';
+      var dateInput = document.createElement('input');
+      dateInput.type = 'date';
+      dateInput.className = 'stmt-date';
+      dateInput.value = row.date;
+      var amountInput = document.createElement('input');
+      amountInput.type = 'number';
+      amountInput.step = '0.01';
+      amountInput.min = '0';
+      amountInput.className = 'stmt-amount';
+      amountInput.value = row.amount.toFixed(2);
+      top.appendChild(dateInput);
+      top.appendChild(amountInput);
+      main.appendChild(top);
+
+      var descInput = document.createElement('input');
+      descInput.type = 'text';
+      descInput.className = 'stmt-desc';
+      descInput.maxLength = 80;
+      descInput.value = row.note;
+      descInput.placeholder = 'Description';
+      main.appendChild(descInput);
+
+      var bottom = document.createElement('div');
+      bottom.className = 'stmt-row-bottom';
+
+      var toggle = document.createElement('div');
+      toggle.className = 'stmt-type-toggle';
+      var expBtn = document.createElement('button');
+      expBtn.type = 'button';
+      expBtn.className = 'stmt-type-btn expense' + (row.type === 'expense' ? ' active' : '');
+      expBtn.dataset.type = 'expense';
+      expBtn.textContent = '🌸';
+      var incBtn = document.createElement('button');
+      incBtn.type = 'button';
+      incBtn.className = 'stmt-type-btn income' + (row.type === 'income' ? ' active' : '');
+      incBtn.dataset.type = 'income';
+      incBtn.textContent = '🌱';
+      toggle.appendChild(expBtn);
+      toggle.appendChild(incBtn);
+      bottom.appendChild(toggle);
+
+      var catSelect = document.createElement('select');
+      catSelect.className = 'stmt-category';
+      populateStmtCategorySelect(catSelect, row.type, row.category);
+      bottom.appendChild(catSelect);
+
+      function setType(newType) {
+        expBtn.classList.toggle('active', newType === 'expense');
+        incBtn.classList.toggle('active', newType === 'income');
+        populateStmtCategorySelect(catSelect, newType, newType === 'expense' ? 'other-exp' : 'other-inc');
+      }
+      expBtn.addEventListener('click', function () { setType('expense'); });
+      incBtn.addEventListener('click', function () { setType('income'); });
+
+      main.appendChild(bottom);
+      rowEl.appendChild(main);
+      el.stmtRows.appendChild(rowEl);
+    });
+  }
+
+  el.stmtSelectAll.addEventListener('change', function () {
+    var checked = el.stmtSelectAll.checked;
+    Array.prototype.forEach.call(el.stmtRows.querySelectorAll('.stmt-row'), function (rowEl) {
+      var box = rowEl.querySelector('.stmt-check');
+      box.checked = checked;
+      rowEl.classList.toggle('excluded', !checked);
+    });
+  });
+
+  el.stmtImportBtn.addEventListener('click', function () {
+    var rowEls = el.stmtRows.querySelectorAll('.stmt-row');
+    var count = 0;
+    Array.prototype.forEach.call(rowEls, function (rowEl) {
+      if (!rowEl.querySelector('.stmt-check').checked) return;
+      var date = rowEl.querySelector('.stmt-date').value;
+      var note = rowEl.querySelector('.stmt-desc').value.trim();
+      var amount = parseFloat(rowEl.querySelector('.stmt-amount').value);
+      var activeTypeBtn = rowEl.querySelector('.stmt-type-btn.active');
+      var type = activeTypeBtn ? activeTypeBtn.dataset.type : 'expense';
+      var category = rowEl.querySelector('.stmt-category').value;
+      if (!date || !amount || amount <= 0) return;
+
+      state.transactions.push({
+        id: uid(),
+        type: type,
+        category: category,
+        amount: amount,
+        date: date,
+        note: note,
+        createdAt: Date.now()
+      });
+      count++;
+    });
+
+    saveTransactions();
+    closeStatementModal();
+    renderAll();
+    alert(count + ' transaction' + (count === 1 ? '' : 's') + ' imported!');
   });
 
   // ---------- Init ----------

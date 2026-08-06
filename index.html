@@ -4,8 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#f7a8c4">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Matcha Blossom Budget</title>
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=4">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍵</text></svg>">
 </head>
 <body>
@@ -181,6 +184,7 @@
         <option value="A$">A$ Aus. Dollar</option>
       </select>
     </div>
+    <button id="statementBtn" class="save-btn secondary">📄 Import bank statement</button>
     <button id="exportBtn" class="save-btn secondary">Export data (backup)</button>
     <button id="importBtn" class="save-btn secondary">Import data (restore)</button>
     <input type="file" id="importFile" accept="application/json" hidden>
@@ -209,6 +213,36 @@
   </div>
 </div>
 
-<script src="app.js"></script>
+<div class="modal-overlay" id="statementOverlay">
+  <div class="modal statement-modal">
+    <div class="modal-header">
+      <h2>Import Bank Statement</h2>
+      <button id="closeStatement" class="icon-btn" aria-label="Close">✕</button>
+    </div>
+
+    <div id="stmtStepFile">
+      <p class="stmt-hint">Upload a <strong>CSV</strong> export from your bank for the most reliable results, or try a <strong>PDF</strong> statement (experimental — text layout varies by bank, so double-check the results). Nothing is saved until you review and confirm each transaction.</p>
+      <button type="button" id="stmtChooseBtn" class="save-btn secondary">📄 Choose File</button>
+      <input type="file" id="stmtFileInput" accept=".csv,.pdf,text/csv,application/pdf" hidden>
+      <p class="stmt-loading" id="stmtLoading" hidden>Reading your statement… 🍵</p>
+      <p class="stmt-error" id="stmtError" hidden></p>
+    </div>
+
+    <div id="stmtStepReview" hidden>
+      <p class="stmt-summary" id="stmtSummary">0 transactions found</p>
+      <label class="stmt-select-all">
+        <input type="checkbox" id="stmtSelectAll" checked>
+        <span>Select all</span>
+      </label>
+      <div class="stmt-rows" id="stmtRows"></div>
+      <div class="modal-actions">
+        <button type="button" id="stmtBackBtn" class="delete-btn">Back</button>
+        <button type="button" id="stmtImportBtn" class="save-btn">Import Selected 🍵</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="app.js?v=4"></script>
 </body>
 </html>

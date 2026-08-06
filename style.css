@@ -798,3 +798,93 @@ input:focus, select:focus { outline: none; border-color: var(--pink); }
   body { padding: 20px 0; }
   .app { border-radius: 28px; overflow: hidden; }
 }
+
+/* ---------- Statement import ---------- */
+.statement-modal { max-height: 92vh; }
+
+.stmt-hint {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-soft);
+  margin: 0 0 14px;
+}
+
+.stmt-loading {
+  text-align: center;
+  color: var(--matcha-dark);
+  font-weight: 700;
+  margin-top: 14px;
+}
+
+.stmt-error {
+  text-align: center;
+  color: var(--pink-dark);
+  font-weight: 700;
+  font-size: 14px;
+  margin-top: 14px;
+  line-height: 1.5;
+}
+
+.stmt-summary {
+  font-weight: 700;
+  color: var(--text);
+  margin: 0 0 8px;
+}
+
+.stmt-select-all {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-soft);
+  margin-bottom: 10px;
+}
+.stmt-select-all input { width: 18px; height: 18px; }
+
+.stmt-rows {
+  max-height: 50vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.stmt-row {
+  display: flex;
+  gap: 8px;
+  background: var(--white);
+  border-radius: 14px;
+  padding: 10px;
+  box-shadow: 0 2px 6px rgba(216,71,122,0.06);
+}
+
+.stmt-row.excluded { opacity: 0.45; }
+
+.stmt-check { width: 20px; height: 20px; min-width: 20px; margin-top: 6px; }
+
+.stmt-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+
+.stmt-row-top { display: flex; gap: 6px; }
+.stmt-row-top input { padding: 8px 10px; font-size: 13px; }
+.stmt-row-top input.stmt-date { flex: 1; width: auto; min-width: 130px; }
+.stmt-row-top input.stmt-amount { width: 90px; flex: none; }
+
+.stmt-desc { padding: 8px 10px; font-size: 13px; }
+
+.stmt-row-bottom { display: flex; gap: 6px; align-items: center; }
+
+.stmt-type-toggle { display: flex; gap: 4px; flex: none; }
+.stmt-type-btn {
+  border: 2px solid var(--pink-light);
+  background: var(--white);
+  border-radius: 10px;
+  padding: 6px 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.stmt-type-btn.expense.active { background: var(--pink); border-color: var(--pink); }
+.stmt-type-btn.income.active { background: var(--matcha); border-color: var(--matcha); }
+
+.stmt-category { flex: 1; min-width: 0; padding: 8px 10px; font-size: 13px; }
