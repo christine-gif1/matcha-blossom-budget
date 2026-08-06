@@ -232,6 +232,11 @@
     stmtRows: document.getElementById('stmtRows'),
     stmtBackBtn: document.getElementById('stmtBackBtn'),
     stmtImportBtn: document.getElementById('stmtImportBtn'),
+    pdfPasswordOverlay: document.getElementById('pdfPasswordOverlay'),
+    closePdfPassword: document.getElementById('closePdfPassword'),
+    pdfPasswordInput: document.getElementById('pdfPasswordInput'),
+    pdfPasswordError: document.getElementById('pdfPasswordError'),
+    unlockPdfBtn: document.getElementById('unlockPdfBtn'),
     clearBtn: document.getElementById('clearBtn')
   };
 
@@ -989,9 +994,60 @@
     return rows;
   }
 
+  var pdfPasswordResolve = null;
+
+  function promptPdfPassword(reason) {
+    return new Promise(function (resolve) {
+      pdfPasswordResolve = resolve;
+      el.pdfPasswordInput.value = '';
+      el.pdfPasswordError.hidden = reason !== window.pdfjsLib.PasswordResponses.INCORRECT_PASSWORD;
+      el.statementOverlay.classList.remove('show');
+      el.pdfPasswordOverlay.classList.add('show');
+      setTimeout(function () { el.pdfPasswordInput.focus(); }, 50);
+    });
+  }
+
+  function submitPdfPassword() {
+    var pwd = el.pdfPasswordInput.value;
+    if (!pwd) { el.pdfPasswordInput.focus(); return; }
+    el.pdfPasswordOverlay.classList.remove('show');
+    el.statementOverlay.classList.add('show');
+    if (pdfPasswordResolve) { pdfPasswordResolve(pwd); pdfPasswordResolve = null; }
+  }
+
+  el.unlockPdfBtn.addEventListener('click', submitPdfPassword);
+  el.pdfPasswordInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') submitPdfPassword();
+  });
+  el.closePdfPassword.addEventListener('click', function () {
+    el.pdfPasswordOverlay.classList.remove('show');
+    el.statementOverlay.classList.add('show');
+    if (pdfPasswordResolve) { pdfPasswordResolve(null); pdfPasswordResolve = null; }
+  });
+  el.pdfPasswordOverlay.addEventListener('click', function (e) {
+    if (e.target === el.pdfPasswordOverlay) el.closePdfPassword.click();
+  });
+
+  function loadPdfDocument(buf) {
+    return new Promise(function (resolve, reject) {
+      var loadingTask = window.pdfjsLib.getDocument({ data: buf });
+      loadingTask.onPassword = function (updatePassword, reason) {
+        promptPdfPassword(reason).then(function (pwd) {
+          if (pwd == null) {
+            loadingTask.destroy();
+            reject(new Error('cancelled'));
+          } else {
+            updatePassword(pwd);
+          }
+        });
+      };
+      loadingTask.promise.then(resolve, reject);
+    });
+  }
+
   function extractPdfLines(file) {
     return file.arrayBuffer().then(function (buf) {
-      return window.pdfjsLib.getDocument({ data: buf }).promise;
+      return loadPdfDocument(buf);
     }).then(function (pdf) {
       var pagePromises = [];
       for (var p = 1; p <= pdf.numPages; p++) {
@@ -1094,6 +1150,10 @@
       }
       renderStatementReview(rows);
     }).catch(function (err) {
+      if (err && err.message === 'cancelled') {
+        el.stmtLoading.hidden = true;
+        return;
+      }
       showStatementError('Something went wrong reading that file: ' + err.message);
     });
   });

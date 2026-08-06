@@ -8,7 +8,7 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <title>Matcha Blossom Budget</title>
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🍵</text></svg>">
 </head>
 <body>
@@ -243,6 +243,22 @@
   </div>
 </div>
 
-<script src="app.js?v=4"></script>
+<div class="modal-overlay" id="pdfPasswordOverlay">
+  <div class="modal small">
+    <div class="modal-header">
+      <h2>🔒 Locked PDF</h2>
+      <button id="closePdfPassword" class="icon-btn" aria-label="Close">✕</button>
+    </div>
+    <p class="stmt-hint">This statement is password protected. Enter the password to unlock it (usually set by your bank — check the statement email or your account settings).</p>
+    <div class="form-group">
+      <label for="pdfPasswordInput">Password</label>
+      <input type="password" id="pdfPasswordInput" placeholder="Statement password">
+    </div>
+    <p class="stmt-error" id="pdfPasswordError" hidden>Incorrect password — try again.</p>
+    <button id="unlockPdfBtn" class="save-btn">Unlock 🔓</button>
+  </div>
+</div>
+
+<script src="app.js?v=5"></script>
 </body>
 </html>
