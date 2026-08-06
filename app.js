@@ -914,10 +914,34 @@
       if (map.date == null && /date/.test(k)) map.date = idx;
       else if (map.desc == null && /(desc|narrative|memo|detail|particular|payee|merchant|reference)/.test(k)) map.desc = idx;
       else if (map.amount == null && /^amount$/.test(k)) map.amount = idx;
-      else if (map.debit == null && /(debit|withdrawal|money ?out|paid ?out)/.test(k)) map.debit = idx;
-      else if (map.credit == null && /(credit|deposit|money ?in|paid ?in)/.test(k)) map.credit = idx;
+      // "Withdrawal"/"Money Out" columns are unambiguous - always an expense.
+      else if (map.withdrawalCol == null && /(withdrawal|money ?out|paid ?out)/.test(k)) map.withdrawalCol = idx;
+      // "Deposit"/"Money In" columns are unambiguous - always income.
+      else if (map.depositCol == null && /(deposit|money ?in|paid ?in)/.test(k)) map.depositCol = idx;
+      // Literal "Debit"/"Credit" columns are bank-specific - flipped below (Debit=income, Credit=expense).
+      else if (map.debitCol == null && /\bdebit\b/.test(k)) map.debitCol = idx;
+      else if (map.creditCol == null && /\bcredit\b/.test(k)) map.creditCol = idx;
+      else if (map.type == null && /(type|dr\s*\/\s*cr|indicator)/.test(k)) map.type = idx;
     });
     return map;
+  }
+
+  // Unambiguous plain-English action words - these mean the same thing regardless
+  // of how a bank labels its debit/credit columns.
+  var EXPENSE_WORDS = /\b(withdrawal|withdrew|purchase|payment|paid|pos|atm|deduct(?:ion|ed)?|charge[ds]?|fee|bill\s*pay|transfer\s*(?:to|out)|pay(?:ment)?\s*to)\b/i;
+  var INCOME_WORDS = /\b(deposit(?:ed)?|salary|refund(?:ed)?|transfer\s*(?:from|in)|incoming|received|reversal|interest\s*earned)\b/i;
+  // "Debit"/"Credit" terminology is bank-specific and inconsistent - on this
+  // user's statements, Debit = money in (income) and Credit = money out (expense).
+  var DEBIT_MARK = /\b(debit(?:ed)?|dr)\.?\b/i;
+  var CREDIT_MARK = /\b(credit(?:ed)?|cr)\.?\b/i;
+
+  function classifyByKeywords(text) {
+    if (!text) return null;
+    if (EXPENSE_WORDS.test(text)) return 'expense';
+    if (INCOME_WORDS.test(text)) return 'income';
+    if (DEBIT_MARK.test(text)) return 'income';
+    if (CREDIT_MARK.test(text)) return 'expense';
+    return null;
   }
 
   function parseAmountStr(str) {
@@ -967,19 +991,37 @@
       if (map.desc != null) {
         desc = cols[map.desc];
       } else {
-        var used = [map.date, map.amount, map.debit, map.credit];
+        var used = [map.date, map.amount, map.withdrawalCol, map.depositCol, map.debitCol, map.creditCol];
         desc = cols.filter(function (_, i) { return used.indexOf(i) === -1; }).join(' ');
       }
 
       var amount = null, type = 'expense';
       if (map.amount != null) {
         var amt = parseAmountStr(cols[map.amount]);
-        if (amt != null) { type = amt < 0 ? 'expense' : 'income'; amount = Math.abs(amt); }
+        if (amt != null) {
+          amount = Math.abs(amt);
+          if (amt < 0) {
+            type = 'expense';
+          } else if (map.type != null) {
+            var typeStr = (cols[map.type] || '').toLowerCase().trim();
+            type = /^withdrawal/.test(typeStr) ? 'expense'
+              : /^deposit/.test(typeStr) ? 'income'
+              : /^(d|dr|debit)/.test(typeStr) ? 'income'
+              : /^(c|cr|credit)/.test(typeStr) ? 'expense'
+              : (classifyByKeywords(desc) || 'income');
+          } else {
+            type = classifyByKeywords(desc) || 'income';
+          }
+        }
       } else {
-        var debitVal = map.debit != null ? parseAmountStr(cols[map.debit]) : null;
-        var creditVal = map.credit != null ? parseAmountStr(cols[map.credit]) : null;
-        if (debitVal) { amount = Math.abs(debitVal); type = 'expense'; }
-        else if (creditVal) { amount = Math.abs(creditVal); type = 'income'; }
+        var withdrawalVal = map.withdrawalCol != null ? parseAmountStr(cols[map.withdrawalCol]) : null;
+        var depositVal = map.depositCol != null ? parseAmountStr(cols[map.depositCol]) : null;
+        var debitColVal = map.debitCol != null ? parseAmountStr(cols[map.debitCol]) : null;
+        var creditColVal = map.creditCol != null ? parseAmountStr(cols[map.creditCol]) : null;
+        if (withdrawalVal) { amount = Math.abs(withdrawalVal); type = 'expense'; }
+        else if (depositVal) { amount = Math.abs(depositVal); type = 'income'; }
+        else if (debitColVal) { amount = Math.abs(debitColVal); type = 'income'; }
+        else if (creditColVal) { amount = Math.abs(creditColVal); type = 'expense'; }
       }
       if (amount == null || isNaN(amount) || amount === 0) continue;
 
@@ -1075,17 +1117,37 @@
 
   function buildRowsFromPdfLines(lines) {
     var rows = [];
-    var lineRe = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})\s+(.+?)\s+(\(?-?\s?[₱$€£]?\s?\d[\d,]*\.\d{2}\)?)\s*$/;
+    var dateRe = /(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}-\d{2}-\d{2})/;
+    var moneyRe = /\(?-?\s?[₱$€£]?\s?\d{1,3}(?:,\d{3})*(?:\.\d{2})\)?/g;
+
     lines.forEach(function (line) {
-      var m = line.match(lineRe);
-      if (!m) return;
-      var date = parseDateFlexible(m[1]);
-      var amount = parseAmountStr(m[3]);
-      if (!date || amount == null || amount === 0) return;
-      var type = amount < 0 ? 'expense' : 'income';
+      var dm = line.match(dateRe);
+      if (!dm) return;
+      var date = parseDateFlexible(dm[1]);
+      if (!date) return;
+
+      var rest = line.slice(dm.index + dm[0].length);
+      var moneyMatches = rest.match(moneyRe);
+      if (!moneyMatches || !moneyMatches.length) return;
+
+      // A trailing running-balance column is common ("... 1,500.00  48,500.00").
+      // When 2+ numbers appear, treat the second-to-last as the transaction
+      // amount and drop the last (the balance); otherwise it's the only number.
+      var amountToken = moneyMatches.length >= 2 ? moneyMatches[moneyMatches.length - 2] : moneyMatches[0];
+      var amount = parseAmountStr(amountToken);
+      if (amount == null || amount === 0) return;
+
+      var desc = rest.slice(0, rest.indexOf(moneyMatches[0])).replace(/^[\s,.\-:]+/, '').trim();
+      if (!desc) desc = line.replace(dm[0], '').trim();
+
+      var type;
+      if (/^\s*-/.test(amountToken) || /^\(/.test(amountToken)) type = 'expense';
+      else if (/^\s*\+/.test(amountToken)) type = 'income';
+      else type = classifyByKeywords(desc) || classifyByKeywords(line) || 'expense';
+
       rows.push({
         date: date,
-        note: m[2].trim().slice(0, 80),
+        note: desc.slice(0, 80),
         amount: Math.abs(amount),
         type: type,
         category: type === 'expense' ? 'other-exp' : 'other-inc'
