@@ -221,9 +221,9 @@
     </div>
 
     <div id="stmtStepFile">
-      <p class="stmt-hint">Upload a <strong>CSV</strong> export from your bank for the most reliable results, or try a <strong>PDF</strong> statement (experimental — text layout varies by bank, so double-check the results). Nothing is saved until you review and confirm each transaction.</p>
+      <p class="stmt-hint">Upload a <strong>CSV</strong> or <strong>Excel (.xlsx/.xls)</strong> export from your bank for the most reliable results, or try a <strong>PDF</strong> statement (experimental — text layout varies by bank, so double-check the results). Nothing is saved until you review and confirm each transaction.</p>
       <button type="button" id="stmtChooseBtn" class="save-btn secondary">📄 Choose File</button>
-      <input type="file" id="stmtFileInput" accept=".csv,.pdf,text/csv,application/pdf" hidden>
+      <input type="file" id="stmtFileInput" accept=".csv,.pdf,.xlsx,.xls,text/csv,application/pdf,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" hidden>
       <p class="stmt-loading" id="stmtLoading" hidden>Reading your statement… 🍵</p>
       <p class="stmt-error" id="stmtError" hidden></p>
     </div>
@@ -259,6 +259,6 @@
   </div>
 </div>
 
-<script src="app.js?v=7"></script>
+<script src="app.js?v=8"></script>
 </body>
 </html>

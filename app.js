@@ -877,6 +877,29 @@
     });
   }
 
+  var XLSX_VERSION = '0.18.5';
+
+  function loadXlsxLib() {
+    if (window.XLSX) return Promise.resolve();
+    return new Promise(function (resolve, reject) {
+      var script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/' + XLSX_VERSION + '/xlsx.full.min.js';
+      script.onload = function () { resolve(); };
+      script.onerror = function () { reject(new Error('Could not load Excel reader.')); };
+      document.head.appendChild(script);
+    });
+  }
+
+  function buildRowsFromExcel(buf) {
+    var workbook = window.XLSX.read(buf, { type: 'array', cellDates: true });
+    var sheet = workbook.Sheets[workbook.SheetNames[0]];
+    var table = window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
+    table = table.map(function (row) {
+      return row.map(function (c) { return c == null ? '' : String(c); });
+    });
+    return buildRowsFromTable(table);
+  }
+
   function parseCSVText(text) {
     var rows = [];
     var row = [];
@@ -977,7 +1000,10 @@
   }
 
   function buildRowsFromCsv(text) {
-    var table = parseCSVText(text);
+    return buildRowsFromTable(parseCSVText(text));
+  }
+
+  function buildRowsFromTable(table) {
     if (!table.length) return [];
     var map = mapCsvColumns(table[0]);
     var rows = [];
@@ -1193,12 +1219,18 @@
     el.stmtLoading.hidden = false;
 
     var isPdf = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+    var isExcel = /\.xlsx?$/i.test(file.name) ||
+      /spreadsheet|ms-excel/.test(file.type);
 
     var parsePromise;
     if (isPdf) {
       parsePromise = loadPdfJs()
         .then(function () { return extractPdfLines(file); })
         .then(buildRowsFromPdfLines);
+    } else if (isExcel) {
+      parsePromise = loadXlsxLib()
+        .then(function () { return file.arrayBuffer(); })
+        .then(buildRowsFromExcel);
     } else {
       parsePromise = file.text().then(buildRowsFromCsv);
     }
@@ -1206,7 +1238,7 @@
     parsePromise.then(function (rows) {
       el.stmtLoading.hidden = true;
       if (!rows.length) {
-        showStatementError('Couldn\'t find any transactions in that file. For best results, export a CSV statement from your bank\'s website instead.');
+        showStatementError('Couldn\'t find any transactions in that file. For best results, export a CSV or Excel statement from your bank\'s website instead.');
         return;
       }
       renderStatementReview(rows);
