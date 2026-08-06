@@ -237,6 +237,7 @@
     pdfPasswordInput: document.getElementById('pdfPasswordInput'),
     pdfPasswordError: document.getElementById('pdfPasswordError'),
     unlockPdfBtn: document.getElementById('unlockPdfBtn'),
+    togglePdfPassword: document.getElementById('togglePdfPassword'),
     clearBtn: document.getElementById('clearBtn')
   };
 
@@ -890,9 +891,15 @@
     });
   }
 
-  function isPasswordError(err) {
+  function isPasswordError(err, hasPassword) {
     var msg = ((err && err.message) || '').toLowerCase();
-    return /password|encrypt|zip/.test(msg);
+    // Before any password has been tried, only treat it as encrypted if the
+    // error actually says so - a generic/unrelated parse failure shouldn't
+    // get misdiagnosed as "wrong password" and loop forever.
+    if (!hasPassword) return /password/.test(msg);
+    // Once we know it's encrypted, any further failure (including a
+    // corrupted-zip error from a failed decrypt) means the password was wrong.
+    return true;
   }
 
   function loadExcelWorkbook(buf) {
@@ -904,7 +911,7 @@
           if (password) opts.password = password;
           workbook = window.XLSX.read(buf, opts);
         } catch (err) {
-          if (isPasswordError(err)) {
+          if (isPasswordError(err, !!password)) {
             promptFilePassword(isRetry).then(function (pwd) {
               if (pwd == null) reject(new Error('cancelled'));
               else attempt(pwd, true);
@@ -1098,6 +1105,8 @@
     return new Promise(function (resolve) {
       pdfPasswordResolve = resolve;
       el.pdfPasswordInput.value = '';
+      el.pdfPasswordInput.type = 'password';
+      el.togglePdfPassword.textContent = '👁️';
       el.pdfPasswordError.hidden = !isRetry;
       el.statementOverlay.classList.remove('show');
       el.pdfPasswordOverlay.classList.add('show');
@@ -1118,6 +1127,11 @@
   }
 
   el.unlockPdfBtn.addEventListener('click', submitPdfPassword);
+  el.togglePdfPassword.addEventListener('click', function () {
+    var showing = el.pdfPasswordInput.type === 'text';
+    el.pdfPasswordInput.type = showing ? 'password' : 'text';
+    el.togglePdfPassword.textContent = showing ? '👁️' : '🙈';
+  });
   el.pdfPasswordInput.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') submitPdfPassword();
   });

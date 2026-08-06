@@ -888,3 +888,16 @@ input:focus, select:focus { outline: none; border-color: var(--pink); }
 .stmt-type-btn.income.active { background: var(--matcha); border-color: var(--matcha); }
 
 .stmt-category { flex: 1; min-width: 0; padding: 8px 10px; font-size: 13px; }
+
+.pwd-input-row { display: flex; gap: 8px; align-items: center; }
+.pwd-input-row input { flex: 1; min-width: 0; }
+.pwd-toggle-btn {
+  flex: none;
+  background: var(--white);
+  border: 2px solid var(--pink-light);
+  border-radius: 12px;
+  width: 46px;
+  height: 46px;
+  font-size: 18px;
+  cursor: pointer;
+}
