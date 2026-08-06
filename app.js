@@ -890,14 +890,45 @@
     });
   }
 
-  function buildRowsFromExcel(buf) {
-    var workbook = window.XLSX.read(buf, { type: 'array', cellDates: true });
-    var sheet = workbook.Sheets[workbook.SheetNames[0]];
-    var table = window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
-    table = table.map(function (row) {
-      return row.map(function (c) { return c == null ? '' : String(c); });
+  function isPasswordError(err) {
+    var msg = ((err && err.message) || '').toLowerCase();
+    return /password|encrypt|zip/.test(msg);
+  }
+
+  function loadExcelWorkbook(buf) {
+    return new Promise(function (resolve, reject) {
+      function attempt(password, isRetry) {
+        var workbook;
+        try {
+          var opts = { type: 'array', cellDates: true };
+          if (password) opts.password = password;
+          workbook = window.XLSX.read(buf, opts);
+        } catch (err) {
+          if (isPasswordError(err)) {
+            promptFilePassword(isRetry).then(function (pwd) {
+              if (pwd == null) reject(new Error('cancelled'));
+              else attempt(pwd, true);
+            });
+            return;
+          }
+          reject(err);
+          return;
+        }
+        resolve(workbook);
+      }
+      attempt(null, false);
     });
-    return buildRowsFromTable(table);
+  }
+
+  function buildRowsFromExcel(buf) {
+    return loadExcelWorkbook(buf).then(function (workbook) {
+      var sheet = workbook.Sheets[workbook.SheetNames[0]];
+      var table = window.XLSX.utils.sheet_to_json(sheet, { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
+      table = table.map(function (row) {
+        return row.map(function (c) { return c == null ? '' : String(c); });
+      });
+      return buildRowsFromTable(table);
+    });
   }
 
   function parseCSVText(text) {
@@ -1063,15 +1094,19 @@
 
   var pdfPasswordResolve = null;
 
-  function promptPdfPassword(reason) {
+  function promptFilePassword(isRetry) {
     return new Promise(function (resolve) {
       pdfPasswordResolve = resolve;
       el.pdfPasswordInput.value = '';
-      el.pdfPasswordError.hidden = reason !== window.pdfjsLib.PasswordResponses.INCORRECT_PASSWORD;
+      el.pdfPasswordError.hidden = !isRetry;
       el.statementOverlay.classList.remove('show');
       el.pdfPasswordOverlay.classList.add('show');
       setTimeout(function () { el.pdfPasswordInput.focus(); }, 50);
     });
+  }
+
+  function promptPdfPassword(reason) {
+    return promptFilePassword(reason === window.pdfjsLib.PasswordResponses.INCORRECT_PASSWORD);
   }
 
   function submitPdfPassword() {
