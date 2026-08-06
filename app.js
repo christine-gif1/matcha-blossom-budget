@@ -891,39 +891,26 @@
     });
   }
 
-  function isPasswordError(err, hasPassword) {
-    var msg = ((err && err.message) || '').toLowerCase();
-    // Before any password has been tried, only treat it as encrypted if the
-    // error actually says so - a generic/unrelated parse failure shouldn't
-    // get misdiagnosed as "wrong password" and loop forever.
-    if (!hasPassword) return /password/.test(msg);
-    // Once we know it's encrypted, any further failure (including a
-    // corrupted-zip error from a failed decrypt) means the password was wrong.
-    return true;
-  }
-
+  // The free/community SheetJS build (loaded above) references decrypt_agile
+  // and decrypt_std76 for password-protected workbooks but never defines
+  // them - actual decryption isn't included in this build at any price
+  // point we can load client-side, so a password prompt here would never
+  // succeed no matter what's typed. Fail fast with a real workaround
+  // instead of pretending a retry loop could work.
   function loadExcelWorkbook(buf) {
     return new Promise(function (resolve, reject) {
-      function attempt(password, isRetry) {
-        var workbook;
-        try {
-          var opts = { type: 'array', cellDates: true };
-          if (password) opts.password = password;
-          workbook = window.XLSX.read(buf, opts);
-        } catch (err) {
-          if (isPasswordError(err, !!password)) {
-            promptFilePassword(isRetry).then(function (pwd) {
-              if (pwd == null) reject(new Error('cancelled'));
-              else attempt(pwd, true);
-            });
-            return;
-          }
+      var workbook;
+      try {
+        workbook = window.XLSX.read(buf, { type: 'array', cellDates: true });
+      } catch (err) {
+        if (/password/.test(((err && err.message) || '').toLowerCase())) {
+          reject(new Error('excel-encrypted'));
+        } else {
           reject(err);
-          return;
         }
-        resolve(workbook);
+        return;
       }
-      attempt(null, false);
+      resolve(workbook);
     });
   }
 
@@ -1294,6 +1281,10 @@
     }).catch(function (err) {
       if (err && err.message === 'cancelled') {
         el.stmtLoading.hidden = true;
+        return;
+      }
+      if (err && err.message === 'excel-encrypted') {
+        showStatementError('This Excel file is password-protected, and unlocking Excel files isn\'t supported in the browser (no password will work here — it\'s a library limitation, not a typo). Please remove the password first — in Excel or Google Sheets: File → Info → Protect Workbook → Encrypt with Password → clear the password → Save — then re-upload. Or export a CSV instead, which always works.');
         return;
       }
       showStatementError('Something went wrong reading that file: ' + err.message);
