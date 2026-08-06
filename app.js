@@ -930,8 +930,7 @@
   // of how a bank labels its debit/credit columns.
   var EXPENSE_WORDS = /\b(withdrawal|withdrew|purchase|payment|paid|pos|atm|deduct(?:ion|ed)?|charge[ds]?|fee|bill\s*pay|transfer\s*(?:to|out)|pay(?:ment)?\s*to)\b/i;
   var INCOME_WORDS = /\b(deposit(?:ed)?|salary|refund(?:ed)?|transfer\s*(?:from|in)|incoming|received|reversal|interest\s*earned)\b/i;
-  // "Debit"/"Credit" terminology is bank-specific and inconsistent - on this
-  // user's statements, Debit = money in (income) and Credit = money out (expense).
+  // Standard banking convention: Debit = money out (expense), Credit = money in (income).
   var DEBIT_MARK = /\b(debit(?:ed)?|dr)\.?\b/i;
   var CREDIT_MARK = /\b(credit(?:ed)?|cr)\.?\b/i;
 
@@ -939,8 +938,8 @@
     if (!text) return null;
     if (EXPENSE_WORDS.test(text)) return 'expense';
     if (INCOME_WORDS.test(text)) return 'income';
-    if (DEBIT_MARK.test(text)) return 'income';
-    if (CREDIT_MARK.test(text)) return 'expense';
+    if (DEBIT_MARK.test(text)) return 'expense';
+    if (CREDIT_MARK.test(text)) return 'income';
     return null;
   }
 
@@ -1006,8 +1005,8 @@
             var typeStr = (cols[map.type] || '').toLowerCase().trim();
             type = /^withdrawal/.test(typeStr) ? 'expense'
               : /^deposit/.test(typeStr) ? 'income'
-              : /^(d|dr|debit)/.test(typeStr) ? 'income'
-              : /^(c|cr|credit)/.test(typeStr) ? 'expense'
+              : /^(d|dr|debit)/.test(typeStr) ? 'expense'
+              : /^(c|cr|credit)/.test(typeStr) ? 'income'
               : (classifyByKeywords(desc) || 'income');
           } else {
             type = classifyByKeywords(desc) || 'income';
@@ -1020,8 +1019,8 @@
         var creditColVal = map.creditCol != null ? parseAmountStr(cols[map.creditCol]) : null;
         if (withdrawalVal) { amount = Math.abs(withdrawalVal); type = 'expense'; }
         else if (depositVal) { amount = Math.abs(depositVal); type = 'income'; }
-        else if (debitColVal) { amount = Math.abs(debitColVal); type = 'income'; }
-        else if (creditColVal) { amount = Math.abs(creditColVal); type = 'expense'; }
+        else if (debitColVal) { amount = Math.abs(debitColVal); type = 'expense'; }
+        else if (creditColVal) { amount = Math.abs(creditColVal); type = 'income'; }
       }
       if (amount == null || isNaN(amount) || amount === 0) continue;
 
